@@ -49,7 +49,7 @@ La alerta guardada en S3 tiene `schema_version`, `alert_id`, `window_start`, mé
 
 ## Preparación local
 
-Requisitos: Python 3.10+ (la Lambda usa Python 3.12), AWS CLI v2 solo para despliegue, AWS SAM CLI solo para empaquetar/desplegar. Para trabajo local no se necesitan credenciales AWS.
+Requisitos: Python 3.10+ (la Lambda usa Python 3.13), AWS CLI v2 solo para despliegue, AWS SAM CLI solo para empaquetar/desplegar. Para trabajo local no se necesitan credenciales AWS.
 
 En PowerShell, desde la raíz:
 

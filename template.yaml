@@ -67,7 +67,7 @@ Resources:
     Properties:
       CodeUri: .
       Handler: lambda_function.lambda_handler
-      Runtime: python3.12
+      Runtime: python3.13
       Timeout: 60
       MemorySize: 256
       Environment:
