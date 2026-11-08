@@ -1,0 +1,122 @@
+AWSTemplateFormatVersion: "2010-09-09"
+Transform: AWS::Serverless-2016-10-31
+Description: Educational Kinesis transaction anomaly demo
+
+Parameters:
+  BedrockModelId:
+    Type: String
+    Default: ""
+    Description: Optional model ID enabled for your AWS account and region; leave blank to disable Bedrock.
+  MaxTransactionsPerCardPerMinute:
+    Type: Number
+    Default: 5
+    MinValue: 2
+    Description: Starter velocity threshold, not a fraud decision.
+
+Resources:
+  TransactionStream:
+    Type: AWS::Kinesis::Stream
+    Properties:
+      Name: !Sub "${AWS::StackName}-transactions"
+      ShardCount: 1
+      RetentionPeriodHours: 24
+      StreamEncryption:
+        EncryptionType: KMS
+        KeyId: alias/aws/kinesis
+
+  StateTable:
+    Type: AWS::DynamoDB::Table
+    Properties:
+      BillingMode: PAY_PER_REQUEST
+      AttributeDefinitions:
+        - AttributeName: pk
+          AttributeType: S
+        - AttributeName: sk
+          AttributeType: S
+      KeySchema:
+        - AttributeName: pk
+          KeyType: HASH
+        - AttributeName: sk
+          KeyType: RANGE
+      TimeToLiveSpecification:
+        AttributeName: expires_at
+        Enabled: true
+      SSESpecification:
+        SSEEnabled: true
+
+  ResultsBucket:
+    Type: AWS::S3::Bucket
+    Properties:
+      PublicAccessBlockConfiguration:
+        BlockPublicAcls: true
+        BlockPublicPolicy: true
+        IgnorePublicAcls: true
+        RestrictPublicBuckets: true
+      BucketEncryption:
+        ServerSideEncryptionConfiguration:
+          - ServerSideEncryptionByDefault:
+              SSEAlgorithm: AES256
+      LifecycleConfiguration:
+        Rules:
+          - Id: ExpireDemoResults
+            Status: Enabled
+            ExpirationInDays: 30
+
+  ProcessorFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      CodeUri: .
+      Handler: lambda_function.lambda_handler
+      Runtime: python3.13
+      Timeout: 60
+      MemorySize: 256
+      Environment:
+        Variables:
+          STATE_TABLE: !Ref StateTable
+          RESULTS_BUCKET: !Ref ResultsBucket
+          BEDROCK_MODEL_ID: !Ref BedrockModelId
+          MAX_TX_PER_CARD_PER_MINUTE: !Ref MaxTransactionsPerCardPerMinute
+      Policies:
+        - KinesisStreamReadPolicy:
+            StreamName: !Ref TransactionStream
+        - DynamoDBCrudPolicy:
+            TableName: !Ref StateTable
+        - S3WritePolicy:
+            BucketName: !Ref ResultsBucket
+        - Statement:
+            - Effect: Allow
+              Action:
+                - dynamodb:TransactWriteItems
+              Resource: !GetAtt StateTable.Arn
+        - Statement:
+            - Effect: Allow
+              Action:
+                - bedrock:InvokeModel
+              Resource: "*"
+      Events:
+        KinesisEvents:
+          Type: Kinesis
+          Properties:
+            Stream: !GetAtt TransactionStream.Arn
+            StartingPosition: TRIM_HORIZON
+            BatchSize: 100
+            MaximumBatchingWindowInSeconds: 5
+            MaximumRetryAttempts: 3
+            BisectBatchOnFunctionError: true
+
+  ProcessorLogGroup:
+    Type: AWS::Logs::LogGroup
+    Properties:
+      LogGroupName: !Sub "/aws/lambda/${ProcessorFunction}"
+      RetentionInDays: 14
+
+Outputs:
+  StreamName:
+    Description: Kinesis stream name for producer.py
+    Value: !Ref TransactionStream
+  StreamArn:
+    Value: !GetAtt TransactionStream.Arn
+  ResultsBucket:
+    Value: !Ref ResultsBucket
+  StateTable:
+    Value: !Ref StateTable

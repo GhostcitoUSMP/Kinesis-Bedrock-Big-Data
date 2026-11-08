@@ -4,3 +4,15 @@ __pycache__/
 .venv/
 .env
 output/
+
+*.py[cod]
+.venv/
+venv/
+.aws-sam/
+*.egg-info/
+.env
+.env.*
+!.env.example
+*.pem
+*.key
+credentials
