@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from dataclasses import asdict, dataclass
 from datetime import datetime
+import math
 from typing import Any
 
 
@@ -38,6 +39,12 @@ class Transaction:
                 raise ValueError(f"{field} must be a non-empty string")
         if isinstance(data.get("amount"), bool) or not isinstance(data.get("amount"), (int, float)):
             raise ValueError("amount must be numeric")
+        if not math.isfinite(float(data["amount"])):
+            raise ValueError("amount must be finite")
+        try:
+            datetime.fromisoformat(data["date"])
+        except ValueError as error:
+            raise ValueError("date must be ISO 8601") from error
         values = {name: data.get(name) for name in cls.__dataclass_fields__}
         values.update(
             id=_required_int(data, "id"),
@@ -65,6 +72,12 @@ class Alert:
     detected_at: str
     detector: str = "local-simulator"
 
+    def __post_init__(self) -> None:
+        if not self.alert_id or not self.reasons:
+            raise ValueError("alert_id and reasons are required")
+        if self.severity not in {"low", "medium", "high", "critical"}:
+            raise ValueError("unsupported alert severity")
+
     def to_dict(self) -> dict[str, Any]:
         result = asdict(self)
         result["reasons"] = list(self.reasons)
@@ -79,6 +92,10 @@ class Explanation:
     recommendation: str
     provider: str
     generated_at: str
+
+    def __post_init__(self) -> None:
+        if not self.alert_id or not self.summary or not self.recommendation:
+            raise ValueError("explanation text and alert_id are required")
 
     def to_dict(self) -> dict[str, Any]:
         result = asdict(self)
@@ -96,6 +113,17 @@ class Metrics:
     explanations_generated: int
     explanation_errors: int
     storage_errors: int
+
+    def __post_init__(self) -> None:
+        counters = (
+            self.transactions_read,
+            self.alerts_generated,
+            self.explanations_generated,
+            self.explanation_errors,
+            self.storage_errors,
+        )
+        if any(value < 0 for value in counters):
+            raise ValueError("metric counters cannot be negative")
 
     def to_dict(self) -> dict[str, Any]:
         return asdict(self)
